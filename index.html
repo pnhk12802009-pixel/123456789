@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>supermarket HODODI - Hệ thống thanh toán siêu thị</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- QRCode.js Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- jsQR for barcode/QR scanning from WebCam canvas -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f6f6f7',
+              100: '#e1e2e5',
+              500: '#1e293b',
+              800: '#0f172a',
+              900: '#020617',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+
+    /* Custom Glassmorphism effect */
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+    }
+    
+    .glass-dark {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Print styling for POS Receipt */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #receipt-print-area, #receipt-print-area * {
+        visibility: visible;
+      }
+      #receipt-print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 0;
+        margin: 0;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+
+    /* Camera Scanning Animation line */
+    @keyframes scanAnimation {
+      0% { top: 0%; }
+      50% { top: 90%; }
+      100% { top: 0%; }
+    }
+    .scan-line {
+      position: absolute;
+      width: 100%;
+      height: 3px;
+      background: #ef4444;
+      box-shadow: 0 0 8px #ef4444;
+      animation: scanAnimation 2.2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50 text-slate-800">
+
+  <!-- ==================== TOP NAVIGATION BAR ==================== -->
+  <header id="app-header" class="hidden sticky top-0 z-30 glass-panel shadow-sm border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <!-- Logo & Title -->
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center text-xl shadow-md">
+            <i class="fa-solid font-bold fa-cart-shopping"></i>
+          </div>
+          <div>
+            <h1 class="font-extrabold text-lg leading-tight tracking-tight text-slate-900">supermarket HODODI</h1>
+            <p class="text-xs text-slate-500 font-medium">Hệ thống thanh toán của siêu thị</p>
+          </div>
+        </div>
+
+        <!-- Desktop Navigation Tabs -->
+        <nav class="hidden md:flex space-x-1" id="nav-desktop">
+          <button onclick="switchTab('pos')" id="tab-btn-pos" class="nav-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 bg-slate-900 text-white shadow-sm">
+            <i class="fa-solid fa-cash-register"></i> Trang chủ (POS)
+          </button>
+          <button onclick="switchTab('products')" id="tab-btn-products" class="nav-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+            <i class="fa-solid fa-boxes-stacked"></i> Sản phẩm
+          </button>
+          <button onclick="switchTab('create-product')" id="tab-btn-create-product" class="admin-only nav-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+            <i class="fa-solid fa-plus-circle"></i> Tạo mã SP
+          </button>
+          <button onclick="switchTab('vouchers')" id="tab-btn-vouchers" class="admin-only nav-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+            <i class="fa-solid fa-ticket"></i> Mã giảm giá
+          </button>
+          <button onclick="switchTab('users')" id="tab-btn-users" class="admin-only nav-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+            <i class="fa-solid fa-users-gear"></i> Tài khoản
+          </button>
+        </nav>
+
+        <!-- User Info & Logout -->
+        <div class="flex items-center gap-3">
+          <div class="text-right hidden sm:block">
+            <span id="current-user-name" class="block font-bold text-xs text-slate-800">Admin</span>
+            <span id="current-user-role" class="block text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Quản lý</span>
+          </div>
+          <button onclick="logout()" title="Đăng xuất" class="p-2 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 transition-all border border-slate-200">
+            <i class="fa-solid fa-right-from-bracket text-lg"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile Navigation Bar -->
+    <div class="md:hidden border-t border-slate-200 bg-white/90 backdrop-blur-md px-2 py-2 flex justify-around text-xs font-semibold overflow-x-auto">
+      <button onclick="switchTab('pos')" id="mob-tab-pos" class="flex flex-col items-center py-1 px-3 text-slate-900 font-bold border-b-2 border-slate-900">
+        <i class="fa-solid fa-cash-register text-base"></i><span>Trang chủ</span>
+      </button>
+      <button onclick="switchTab('products')" id="mob-tab-products" class="flex flex-col items-center py-1 px-3 text-slate-500">
+        <i class="fa-solid fa-boxes-stacked text-base"></i><span>Sản phẩm</span>
+      </button>
+      <button onclick="switchTab('create-product')" id="mob-tab-create-product" class="admin-only flex flex-col items-center py-1 px-3 text-slate-500">
+        <i class="fa-solid fa-plus-circle text-base"></i><span>Tạo SP</span>
+      </button>
+      <button onclick="switchTab('vouchers')" id="mob-tab-vouchers" class="admin-only flex flex-col items-center py-1 px-3 text-slate-500">
+        <i class="fa-solid fa-ticket text-base"></i><span>Giảm giá</span>
+      </button>
+      <button onclick="switchTab('users')" id="mob-tab-users" class="admin-only flex flex-col items-center py-1 px-3 text-slate-500">
+        <i class="fa-solid fa-users-gear text-base"></i><span>Tài khoản</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- ==================== LOGIN SCREEN ==================== -->
+    <section id="login-section" class="flex items-center justify-center min-h-[85vh]">
+      <div class="w-full max-w-md bg-white rounded-3xl shadow-xl border border-slate-200/80 p-6 sm:p-8 relative overflow-hidden">
+        <!-- Top decoration -->
+        <div class="text-center mb-6">
+          <div class="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg">
+            <i class="fa-solid fa-cart-shopping text-3xl"></i>
+          </div>
+          <h2 class="text-2xl font-black tracking-tight text-slate-900">supermarket HODODI</h2>
+          <p class="text-xs text-slate-500 font-semibold uppercase tracking-widest mt-1">Hệ thống thanh toán siêu thị</p>
+        </div>
+
+        <!-- Login Tabs (Admin vs Staff) -->
+        <div class="flex rounded-xl bg-slate-100 p-1 mb-6 text-xs font-bold">
+          <button onclick="switchLoginMode('admin')" id="login-tab-admin" class="flex-1 py-2.5 rounded-lg text-slate-900 bg-white shadow-sm transition-all text-center">
+            <i class="fa-solid fa-user-shield mr-1"></i> Đăng Nhập Admin
+          </button>
+          <button onclick="switchLoginMode('staff')" id="login-tab-staff" class="flex-1 py-2.5 rounded-lg text-slate-500 hover:text-slate-800 transition-all text-center">
+            <i class="fa-solid fa-id-card mr-1"></i> Đăng Nhập Nhân Viên
+          </button>
+        </div>
+
+        <!-- Lock Alert Notification -->
+        <div id="lock-alert" class="hidden mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
+          <div class="flex items-center gap-2 font-bold mb-1">
+            <i class="fa-solid fa-lock"></i> Tài khoản tạm khóa!
+          </div>
+          <p id="lock-timer-text">Thử lại sau: 10:00</p>
+        </div>
+
+        <!-- ADMIN FORM -->
+        <form id="admin-login-form" onsubmit="handleAdminLogin(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Tên đăng nhập Admin</label>
+            <div class="relative">
+              <input type="text" id="admin-user" required class="w-full px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-900 text-sm font-semibold pr-10 outline-none transition" placeholder="Tên tài khoản quản lý">
+              <button type="button" onclick="togglePassVisibility('admin-user', this)" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"><i class="fa-solid fa-eye"></i></button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Mật khẩu thứ 1</label>
+            <div class="relative">
+              <input type="password" id="admin-pass1" required class="w-full px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-900 text-sm font-semibold pr-10 outline-none transition" placeholder="Mật khẩu 1">
+              <button type="button" onclick="togglePassVisibility('admin-pass1', this)" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"><i class="fa-solid fa-eye"></i></button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Mật khẩu thứ 2</label>
+            <div class="relative">
+              <input type="password" id="admin-pass2" required class="w-full px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-900 text-sm font-semibold pr-10 outline-none transition" placeholder="Mật khẩu 2">
+              <button type="button" onclick="togglePassVisibility('admin-pass2', this)" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"><i class="fa-solid fa-eye"></i></button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Mã bảo mật</label>
+            <div class="relative">
+              <input type="password" id="admin-sec-code" required class="w-full px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-900 text-sm font-semibold pr-10 outline-none transition" placeholder="Mã bảo mật cấp cao">
+              <button type="button" onclick="togglePassVisibility('admin-sec-code', this)" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"><i class="fa-solid fa-eye"></i></button>
+            </div>
+          </div>
+
+          <button type="submit" id="admin-login-btn" class="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2">
+            <i class="fa-solid fa-shield-halved"></i> Đăng Nhập Quản Lý
+          </button>
+        </form>
+
+        <!-- STAFF FORM -->
+        <form id="staff-login-form" onsubmit="handleStaffLogin(event)" class="space-y-4 hidden">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Tên đăng nhập nhân viên</label>
+            <input type="text" id="staff-user" required class="w-full px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-900 text-sm font-semibold outline-none" placeholder="Nhập username">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Mật khẩu</label>
+            <div class="relative">
+              <input type="password" id="staff-pass" required class="w-full px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-900 text-sm font-semibold pr-10 outline-none" placeholder="Mật khẩu nhân viên">
+              <button type="button" onclick="togglePassVisibility('staff-pass', this)" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"><i class="fa-solid fa-eye"></i></button>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Mã xác thực nhân viên</label>
+            <input type="text" id="staff-code" required class="w-full px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-900 text-sm font-semibold uppercase outline-none" placeholder="Ví dụ: NV8912">
+          </div>
+          <button type="submit" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2">
+            <i class="fa-solid fa-right-to-bracket"></i> Đăng Nhập Thu Ngân
+          </button>
+        </form>
+
+        <p class="text-center text-slate-400 text-[11px] mt-6">Hệ thống bảo mật 3 lớp HODODI Secure 2026</p>
+      </div>
+    </section>
+
+    <!-- ==================== POS / TRANG CHỦ ==================== -->
+    <section id="pos-tab" class="tab-content hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- LEFT COLUMN: SCANNER & MANUAL ENTRY & QUICK PRODUCTS -->
+        <div class="lg:col-span-5 space-y-6">
+          
+          <!-- SCANNER BOX (HIDDEN ON DESKTOP BY RESPONSIVE DETECTOR / TOGGLE) -->
+          <div id="scanner-wrapper" class="glass-panel p-4 rounded-2xl shadow-sm border border-slate-200">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-extrabold text-sm text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-qrcode text-slate-900"></i> Khung Quét Mã Camera
+              </h3>
+              <span class="text-[11px] px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-bold">Auto-Scan</span>
+            </div>
+
+            <!-- Small QR Camera Box -->
+            <div class="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-inner flex items-center justify-center border-2 border-slate-800">
+              <video id="webcam-video" playsinline class="w-full h-full object-cover"></video>
+              <canvas id="qr-canvas" class="hidden"></canvas>
+              
+              <!-- Scan Overlay Frame -->
+              <div class="absolute inset-0 border-2 border-white/20 rounded-xl pointer-events-none flex items-center justify-center">
+                <div class="w-36 h-36 border-2 border-dashed border-emerald-400 rounded-lg relative">
+                  <div class="scan-line"></div>
+                </div>
+              </div>
+              <p id="cam-status" class="absolute bottom-2 text-[11px] bg-slate-900/80 text-white px-2 py-1 rounded backdrop-blur">Đang khởi động camera...</p>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-2 italic text-center">
+              * Vui lòng đưa mã QR sản phẩm lại <b>gần sát Camera</b> để quét tự động (Phát âm thanh TÍT).
+            </p>
+          </div>
+
+          <!-- MANUAL CODE INPUT FORM -->
+          <div class="glass-panel p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200">
+            <h3 class="font-bold text-xs uppercase tracking-wider text-slate-600 mb-2">Nhập mã sản phẩm thủ công</h3>
+            <form onsubmit="handleManualCodeSubmit(event)" class="flex gap-2">
+              <input type="text" id="manual-sku-input" uppercase class="flex-grow uppercase font-mono font-bold px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 focus:ring-2 focus:ring-slate-900 text-sm outline-none" placeholder="NHẬP MÃ (VD: HOD-1001)..." required>
+              <button type="submit" class="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm shadow transition flex items-center gap-1.5 whitespace-nowrap">
+                <i class="fa-solid fa-plus"></i> Thêm
+              </button>
+            </form>
+          </div>
+
+          <!-- QUICK ADD PRODUCTS -->
+          <div class="glass-panel p-4 rounded-2xl shadow-sm border border-slate-200">
+            <h3 class="font-bold text-xs uppercase tracking-wider text-slate-600 mb-3">Sản phẩm có sẵn</h3>
+            <div id="quick-products-list" class="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-1">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+        </div>
+
+        <!-- RIGHT COLUMN: BILL / HOÁ ĐƠN -->
+        <div class="lg:col-span-7 flex flex-col">
+          <div class="glass-panel p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex-grow flex flex-col">
+            
+            <!-- Receipt Header -->
+            <div class="flex items-center justify-between pb-4 border-b border-slate-200">
+              <div>
+                <h2 class="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <i class="fa-solid fa-receipt text-slate-700"></i> Hóa Đơn Thanh Toán
+                </h2>
+                <p class="text-xs text-slate-500 font-medium">Mã HĐ: <span id="current-invoice-id" class="font-mono font-bold text-slate-800">HD-89102</span></p>
+              </div>
+              <span class="text-xs px-3 py-1 bg-slate-100 text-slate-800 rounded-full font-bold border border-slate-200">
+                <i class="fa-solid fa-clock text-slate-500 mr-1"></i> <span id="live-clock">--:--:--</span>
+              </span>
+            </div>
+
+            <!-- Receipt Items Table -->
+            <div class="flex-grow overflow-x-auto my-4 min-h-[220px]">
+              <table class="w-full text-left text-xs sm:text-sm">
+                <thead>
+                  <tr class="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider text-[11px]">
+                    <th class="py-2">Tên sản phẩm</th>
+                    <th class="py-2 text-center">SL</th>
+                    <th class="py-2 text-right">Đơn giá</th>
+                    <th class="py-2 text-right">Thành tiền</th>
+                    <th class="py-2 text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody id="cart-table-body" class="divide-y divide-slate-100">
+                  <!-- Dynamic items -->
+                </tbody>
+              </table>
+              <div id="empty-cart-msg" class="py-12 text-center text-slate-400 text-sm">
+                <i class="fa-solid fa-basket-shopping text-3xl mb-2 text-slate-300"></i>
+                <p>Chưa có sản phẩm nào trong hóa đơn</p>
+              </div>
+            </div>
+
+            <!-- Discount Voucher Section -->
+            <div class="pt-3 border-t border-slate-200 space-y-3">
+              <div class="flex gap-2">
+                <input type="text" id="voucher-input" maxlength="5" uppercase class="uppercase font-mono font-bold px-3 py-2 bg-white rounded-xl border border-slate-300 text-xs flex-grow outline-none focus:ring-2 focus:ring-slate-900" placeholder="MÃ GIẢM GIÁ (5 KÝ TỰ)">
+                <button onclick="applyVoucher()" class="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-700 transition">Áp dụng</button>
+              </div>
+              <div id="applied-voucher-badge" class="hidden flex items-center justify-between text-xs bg-emerald-50 text-emerald-800 p-2 rounded-xl border border-emerald-200">
+                <span><i class="fa-solid fa-tag"></i> Mã giảm giá: <b id="applied-voucher-code">SALE5</b> (<span id="applied-voucher-desc">Giảm 10%</span>)</span>
+                <button onclick="removeVoucher()" class="text-red-500 font-bold hover:underline">Hủy</button>
+              </div>
+
+              <!-- Price Summary -->
+              <div class="space-y-1 text-sm pt-2">
+                <div class="flex justify-between text-slate-500">
+                  <span>Tạm tính:</span>
+                  <span id="subtotal-val" class="font-bold text-slate-800">0 ₫</span>
+                </div>
+                <div class="flex justify-between text-slate-500">
+                  <span>Giảm giá:</span>
+                  <span id="discount-val" class="font-bold text-emerald-600">-0 ₫</span>
+                </div>
+                <div class="flex justify-between text-base sm:text-lg font-black text-slate-900 pt-2 border-t border-slate-200">
+                  <span>TỔNG TIỀN:</span>
+                  <span id="total-val" class="text-emerald-700">0 ₫</span>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="grid grid-cols-2 gap-3 pt-3">
+                <button onclick="confirmClearCartModal()" class="py-3 px-4 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-extrabold text-xs sm:text-sm transition flex items-center justify-center gap-2 border border-red-200">
+                  <i class="fa-solid fa-trash-can"></i> (- Xóa hóa đơn)
+                </button>
+                <button onclick="openCheckoutReceiptModal()" class="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2">
+                  <i class="fa-solid fa-print"></i> (+ Xuất hóa đơn)
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RECENT HISTORY SECTION (Auto deleted >48h) -->
+      <div class="glass-panel p-5 rounded-2xl shadow-sm border border-slate-200">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-clock-rotate-left"></i> Lịch Sử Hóa Đơn Vừa Rồi (Lưu trong 48h)
+          </h3>
+          <span class="text-xs text-slate-400">Tự động làm sạch sau 48 tiếng</span>
+        </div>
+        <div id="history-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <!-- Dynamic History Cards -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== QUẢN LÝ SẢN PHẨM ==================== -->
+    <section id="products-tab" class="tab-content hidden space-y-6">
+      <div class="glass-panel p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between">
+        <h2 class="text-xl font-black text-slate-900">Danh Sách Sản Phẩm Siêu Thị</h2>
+        <div class="relative w-full sm:w-72">
+          <input type="text" id="search-product-input" oninput="renderProductsTab()" class="w-full pl-9 pr-4 py-2 bg-white rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-slate-900 outline-none" placeholder="Tìm tên hoặc mã SP...">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+        </div>
+      </div>
+
+      <!-- Products Grid -->
+      <div id="products-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- ==================== TẠO MÃ SẢN PHẨM (ADMIN) ==================== -->
+    <section id="create-product-tab" class="tab-content hidden space-y-6">
+      <div class="max-w-2xl mx-auto glass-panel p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200">
+        <div class="mb-6 border-b border-slate-200 pb-4">
+          <h2 class="text-xl font-black text-slate-900">Tạo Mã Sản Phẩm Mới</h2>
+          <p class="text-xs text-slate-500">Mã QR và Mã chữ số sẽ được AI/Hệ thống tự động sinh ngẫu nhiên.</p>
+        </div>
+
+        <form onsubmit="handlePreviewProductModal(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Tải ảnh sản phẩm (File ảnh)</label>
+            <input type="file" id="prod-img-file" accept="image/*" required class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-white hover:file:bg-slate-800">
+            <div id="image-preview-container" class="mt-2 hidden">
+              <img id="image-preview-element" class="w-24 h-24 object-cover rounded-xl border border-slate-300">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Tên sản phẩm</label>
+            <input type="text" id="prod-name-input" required class="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-sm font-semibold outline-none focus:ring-2 focus:ring-slate-900" placeholder="Ví dụ: Sữa tươi Vinamilk 1L">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Mô tả sản phẩm</label>
+            <textarea id="prod-desc-input" rows="3" class="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-sm outline-none focus:ring-2 focus:ring-slate-900" placeholder="Thông tin mô tả vắn tắt..."></textarea>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Giá tiền sản phẩm (VNĐ)</label>
+            <input type="number" id="prod-price-input" min="500" required class="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900" placeholder="Ví dụ: 35000">
+          </div>
+
+          <button type="submit" class="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm shadow-md transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Xem trước & Tạo sản phẩm
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ==================== TẠO MÃ GIẢM GIÁ (ADMIN) ==================== -->
+    <section id="vouchers-tab" class="tab-content hidden space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+        
+        <!-- Form -->
+        <div class="md:col-span-5 glass-panel p-6 rounded-3xl shadow-sm border border-slate-200">
+          <h2 class="text-xl font-black text-slate-900 mb-1">Tạo Mã Giảm Giá</h2>
+          <p class="text-xs text-slate-500 mb-4">Hệ thống tự động sinh Mã đúng 5 ký tự chữ & số.</p>
+
+          <form onsubmit="handleCreateVoucher(event)" class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Mã giảm giá (5 ký tự)</label>
+              <div class="flex gap-2">
+                <input type="text" id="voucher-code-gen" maxlength="5" required uppercase class="w-full uppercase font-mono font-black text-lg px-3 py-2 bg-slate-100 rounded-xl border border-slate-300 text-slate-900 outline-none" readonly>
+                <button type="button" onclick="generateRandomVoucherCode()" class="px-3 bg-slate-200 hover:bg-slate-300 rounded-xl text-xs font-bold">
+                  <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Loại giảm giá</label>
+              <select id="voucher-type-select" onchange="toggleVoucherUnitLabel()" class="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-xs font-semibold outline-none">
+                <option value="percent">Giảm theo % (Phần trăm)</option>
+                <option value="fixed">Giảm số tiền cố định (VNĐ)</option>
+              </select>
+            </div>
+
+            <div>
+              <label id="voucher-value-label" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Giá trị giảm (%)</label>
+              <input type="number" id="voucher-val-input" min="1" required class="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-sm font-bold outline-none" placeholder="Nhập giá trị...">
+            </div>
+
+            <button type="submit" class="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm shadow transition">
+              <i class="fa-solid fa-plus-circle"></i> Thêm Mã Giảm Giá
+            </button>
+          </form>
+        </div>
+
+        <!-- List -->
+        <div class="md:col-span-7 glass-panel p-6 rounded-3xl shadow-sm border border-slate-200">
+          <h3 class="font-extrabold text-sm text-slate-900 mb-4">Danh Sách Mã Giảm Giá Đã Tạo</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="border-b border-slate-200 text-slate-400 font-bold uppercase">
+                  <th class="py-2">Mã (5 ký tự)</th>
+                  <th class="py-2">Mức giảm</th>
+                  <th class="py-2 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="vouchers-table-body" class="divide-y divide-slate-100">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== QUẢN LÝ TÀI KHOẢN (ADMIN ONLY) ==================== -->
+    <section id="users-tab" class="tab-content hidden space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+        
+        <!-- Add Staff Form -->
+        <div class="md:col-span-5 glass-panel p-6 rounded-3xl shadow-sm border border-slate-200">
+          <h2 class="text-xl font-black text-slate-900 mb-1">Tạo Tài Khoản Nhân Viên</h2>
+          <p class="text-xs text-slate-500 mb-4">Tài khoản này chỉ có quyền Thu Ngân (Không thể tạo/xóa SP).</p>
+
+          <form onsubmit="handleCreateStaffAccount(event)" class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Tên đăng nhập</label>
+              <input type="text" id="new-staff-user" required class="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-xs font-semibold outline-none" placeholder="Tên tài khoản...">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Mật khẩu</label>
+              <input type="password" id="new-staff-pass" required class="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-300 text-xs font-semibold outline-none" placeholder="Mật khẩu...">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Mã xác thực (Hệ thống AI tự tạo)</label>
+              <input type="text" id="new-staff-code" readonly class="w-full font-mono font-bold uppercase px-3.5 py-2.5 bg-slate-100 rounded-xl border border-slate-300 text-xs outline-none">
+            </div>
+
+            <button type="submit" class="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm shadow transition">
+              <i class="fa-solid fa-user-plus"></i> Tạo Tài Khoản Nhân Viên
+            </button>
+          </form>
+        </div>
+
+        <!-- Staff List -->
+        <div class="md:col-span-7 glass-panel p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="font-extrabold text-sm text-slate-900">Danh Sách Tài Khoản Phụ</h3>
+            <div class="relative w-48">
+              <input type="text" id="search-staff-input" oninput="renderStaffList()" class="w-full pl-8 pr-3 py-1.5 bg-white rounded-xl border border-slate-300 text-xs outline-none" placeholder="Tìm tài khoản...">
+              <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-slate-400 text-xs"></i>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="border-b border-slate-200 text-slate-400 font-bold uppercase">
+                  <th class="py-2">Tên đăng nhập</th>
+                  <th class="py-2">Mã xác thực</th>
+                  <th class="py-2">Quyền</th>
+                  <th class="py-2 text-right">Xóa</th>
+                </tr>
+              </thead>
+              <tbody id="staff-table-body" class="divide-y divide-slate-100">
+                <!-- Dynamic -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== ALL MODALS ==================== -->
+
+  <!-- MODAL 1: VIEW PRODUCT QR CODE -->
+  <div id="product-qr-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl space-y-4">
+      <h3 id="modal-qr-title" class="font-extrabold text-slate-900 text-base">Tên sản phẩm</h3>
+      <div id="modal-qr-container" class="flex justify-center p-3 bg-white border border-slate-200 rounded-2xl shadow-inner"></div>
+      <p id="modal-qr-sku" class="font-mono font-extrabold text-sm bg-slate-100 py-1.5 rounded-xl text-slate-800">SP-0000</p>
+      <button onclick="closeModal('product-qr-modal')" class="w-full py-2.5 bg-slate-900 text-white font-bold text-xs rounded-xl">Đóng</button>
+    </div>
+  </div>
+
+  <!-- MODAL 2: PREVIEW NEW PRODUCT CREATION -->
+  <div id="create-product-preview-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <h3 class="font-extrabold text-slate-900 text-lg border-b pb-2">Xác Nhận Tạo Mã Sản Phẩm</h3>
+      
+      <div class="flex gap-4 items-center">
+        <img id="prev-prod-img" class="w-20 h-20 object-cover rounded-2xl border">
+        <div>
+          <h4 id="prev-prod-name" class="font-bold text-sm text-slate-900">--</h4>
+          <p id="prev-prod-price" class="text-emerald-600 font-extrabold text-sm">-- ₫</p>
+          <p id="prev-prod-sku" class="text-xs font-mono font-bold text-slate-500 mt-1">Mã: --</p>
+        </div>
+      </div>
+
+      <div class="flex flex-col items-center justify-center p-3 bg-slate-50 border rounded-2xl">
+        <div id="prev-qr-code-box"></div>
+        <span class="text-[10px] text-slate-400 mt-1">Mã QR tự động tạo bởi AI/System</span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 pt-2">
+        <button onclick="closeModal('create-product-preview-modal')" class="py-2.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl">Hủy</button>
+        <button onclick="confirmCreateProduct()" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow">Xác nhận Tạo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: INVOICE PRINT RECEIPT -->
+  <div id="checkout-receipt-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 border border-slate-200">
+      
+      <!-- PRINTABLE AREA -->
+      <div id="receipt-print-area" class="bg-white p-4 font-mono text-xs text-slate-800 border rounded-xl">
+        <div class="text-center mb-3">
+          <h2 class="font-black text-sm uppercase">SUPERMARKET HODODI</h2>
+          <p class="text-[10px]">Hệ thống thanh toán siêu thị</p>
+          <p class="text-[10px] italic">---------------------------------</p>
+          <p id="receipt-date-print" class="text-[10px]">--/--/---- --:--</p>
+        </div>
+        
+        <table class="w-full text-left text-[11px] mb-3">
+          <thead>
+            <tr class="border-b">
+              <th>SP</th>
+              <th class="text-center">SL</th>
+              <th class="text-right">Tiền</th>
+            </tr>
+          </thead>
+          <tbody id="receipt-print-items">
+            <!-- Dynamic -->
+          </tbody>
+        </table>
+        
+        <div class="border-t border-dashed pt-2 space-y-1 text-right text-[11px]">
+          <div>Tạm tính: <span id="receipt-subtotal-print">0 ₫</span></div>
+          <div>Giảm giá: <span id="receipt-discount-print">0 ₫</span></div>
+          <div class="font-extrabold text-sm">TỔNG TIỀN: <span id="receipt-total-print">0 ₫</span></div>
+        </div>
+
+        <div class="text-center mt-4 text-[10px] text-slate-500">
+          <p>Cảm ơn quý khách & Hẹn gặp lại!</p>
+          <p class="font-bold">supermarket HODODI</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 no-print">
+        <button onclick="closeModal('checkout-receipt-modal')" class="py-2.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl">Đóng</button>
+        <button onclick="executePrintReceipt()" class="py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-print"></i> In Hóa Đơn
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL 4: CONFIRMATION MODAL -->
+  <div id="confirm-action-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl space-y-4">
+      <div class="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-xl">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <h3 id="confirm-modal-title" class="font-extrabold text-slate-900 text-base">Xác nhận thao tác</h3>
+      <p id="confirm-modal-msg" class="text-xs text-slate-500">Bạn có chắc chắn muốn thực hiện hành động này không?</p>
+      
+      <div class="grid grid-cols-2 gap-3 pt-2">
+        <button onclick="closeModal('confirm-action-modal')" class="py-2.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl">Hủy</button>
+        <button id="confirm-modal-btn" class="py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow">Xác nhận</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== JAVASCRIPT LOGIC ==================== -->
+  <script>
+    /* ================= SYSTEM DATA INITIALIZATION ================= */
+    const DEFAULT_PRODUCTS = [
+      { id: '1', sku: 'HOD-1001', name: 'Sữa Tươi Vinamilk 1L', price: 38000, desc: 'Sữa tươi tiệt trùng 100%', image: 'https://placehold.co/150x150/1e293b/ffffff?text=Vinamilk' },
+      { id: '2', sku: 'HOD-1002', name: 'Mì Hảo Hảo Tôm Chua Cay', price: 4500, desc: 'Gói 75g giòn ngon', image: 'https://placehold.co/150x150/ef4444/ffffff?text=HaoHao' },
+      { id: '3', sku: 'HOD-1003', name: 'Nước Ngọt Coca Cola 330ml', price: 10000, desc: 'Lon 330ml giải khát', image: 'https://placehold.co/150x150/b91c1c/ffffff?text=CocaCola' },
+      { id: '4', sku: 'HOD-1004', name: 'Bánh Quy OREO Vị Vanille', price: 18000, desc: 'Gói 137g thơm ngon', image: 'https://placehold.co/150x150/0284c7/ffffff?text=Oreo' }
+    ];
+
+    const DEFAULT_VOUCHERS = [
+      { code: 'HD88K', type: 'percent', val: 10 },
+      { code: 'VIP09', type: 'fixed', val: 20000 },
+      { code: 'SALE5', type: 'percent', val: 5 }
+    ];
+
+    // State Variables
+    let products = JSON.parse(localStorage.getItem('hododi_products')) || DEFAULT_PRODUCTS;
+    let vouchers = JSON.parse(localStorage.getItem('hododi_vouchers')) || DEFAULT_VOUCHERS;
+    let staffAccounts = JSON.parse(localStorage.getItem('hododi_staff')) || [];
+    let invoiceHistory = JSON.parse(localStorage.getItem('hododi_invoices')) || [];
+    let currentCart = [];
+    let appliedVoucherObj = null;
+    let currentUser = null; // { role: 'admin'|'staff', user: string }
+    let tempNewProduct = null;
+
+    // Login Lock Security Counter
+    let loginAttempts = parseInt(localStorage.getItem('hododi_login_attempts') || '0');
+    let lockUntilTimestamp = parseInt(localStorage.getItem('hododi_lock_until') || '0');
+    let lockTimerInterval = null;
+
+    // Camera Scanning Setup
+    let videoStream = null;
+    let isScanning = false;
+    let lastScannedCode = '';
+    let lastScanTime = 0;
+
+    /* ================= SOUND SYNTHESIZER (BÍP / TÍT LỚN) ================= */
+    function playBeepSound() {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 1800; // High beep frequency
+        gain.gain.value = 0.8; // Loud volume
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        setTimeout(() => {
+          osc.stop();
+          audioCtx.close();
+        }, 180);
+      } catch (e) {
+        console.log("Audio play error", e);
+      }
+    }
+
+    /* ================= INITIALIZATION ON LOAD ================= */
+    window.onload = function() {
+      // Clean history older than 48h
+      cleanOldHistory();
+      
+      // Check Security Lock status
+      checkLockStatus();
+
+      // Check existing session
+      const savedUser = sessionStorage.getItem('hododi_session');
+      if (savedUser) {
+        currentUser = JSON.parse(savedUser);
+        setupUserInterface();
+      } else {
+        document.getElementById('login-section').classList.remove('hidden');
+      }
+
+      // Live clock updater
+      setInterval(() => {
+        const el = document.getElementById('live-clock');
+        if (el) el.innerText = new Date().toLocaleTimeString('vi-VN');
+      }, 1000);
+
+      // Handle File upload preview
+      const fileInput = document.getElementById('prod-img-file');
+      if (fileInput) {
+        fileInput.addEventListener('change', function(e) {
+          const file = e.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+              document.getElementById('image-preview-element').src = evt.target.result;
+              document.getElementById('image-preview-container').classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+          }
+        });
+      }
+
+      // Initial voucher code generator for Admin tab
+      generateRandomVoucherCode();
+      generateNewStaffCode();
+    };
+
+    /* ================= SECURITY & LOGIN LOGIC ================= */
+    function switchLoginMode(mode) {
+      const adminForm = document.getElementById('admin-login-form');
+      const staffForm = document.getElementById('staff-login-form');
+      const tabAdmin = document.getElementById('login-tab-admin');
+      const tabStaff = document.getElementById('login-tab-staff');
+
+      if (mode === 'admin') {
+        adminForm.classList.remove('hidden');
+        staffForm.classList.add('hidden');
+        tabAdmin.className = "flex-1 py-2.5 rounded-lg text-slate-900 bg-white shadow-sm transition-all text-center font-bold";
+        tabStaff.className = "flex-1 py-2.5 rounded-lg text-slate-500 hover:text-slate-800 transition-all text-center";
+      } else {
+        staffForm.classList.remove('hidden');
+        adminForm.classList.add('hidden');
+        tabStaff.className = "flex-1 py-2.5 rounded-lg text-slate-900 bg-white shadow-sm transition-all text-center font-bold";
+        tabAdmin.className = "flex-1 py-2.5 rounded-lg text-slate-500 hover:text-slate-800 transition-all text-center";
+      }
+    }
+
+    function togglePassVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      const icon = btn.querySelector('i');
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'fa-solid fa-eye-slash';
+      } else {
+        input.type = 'password';
+        icon.className = 'fa-solid fa-eye';
+      }
+    }
+
+    function checkLockStatus() {
+      const now = Date.now();
+      if (lockUntilTimestamp > now) {
+        disableAdminLogin(true);
+        startLockCountdown();
+      } else {
+        disableAdminLogin(false);
+      }
+    }
+
+    function disableAdminLogin(disabled) {
+      const btn = document.getElementById('admin-login-btn');
+      const alertBox = document.getElementById('lock-alert');
+      if (disabled) {
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        alertBox.classList.remove('hidden');
+      } else {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        alertBox.classList.add('hidden');
+        clearInterval(lockTimerInterval);
+      }
+    }
+
+    function startLockCountdown() {
+      clearInterval(lockTimerInterval);
+      lockTimerInterval = setInterval(() => {
+        const remainingMs = lockUntilTimestamp - Date.now();
+        if (remainingMs <= 0) {
+          clearInterval(lockTimerInterval);
+          disableAdminLogin(false);
+          loginAttempts = 0;
+          localStorage.setItem('hododi_login_attempts', '0');
+        } else {
+          const mins = Math.floor(remainingMs / 60000);
+          const secs = Math.floor((remainingMs % 60000) / 1000);
+          document.getElementById('lock-timer-text').innerText = `Thử lại sau: ${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+      }, 1000);
+    }
+
+    function handleAdminLogin(e) {
+      e.preventDefault();
+      if (Date.now() < lockUntilTimestamp) return;
+
+      const u = document.getElementById('admin-user').value.trim();
+      const p1 = document.getElementById('admin-pass1').value;
+      const p2 = document.getElementById('admin-pass2').value;
+      const sec = document.getElementById('admin-sec-code').value.trim();
+
+      // STRICT ADMIN CREDENTIAL VERIFICATION
+      if (u === 'supermarket2408pah' && p1 === 'PAH240809@' && p2 === 'NTM02101972@' && sec === 'PMCNTM4050') {
+        loginAttempts = 0;
+        localStorage.setItem('hododi_login_attempts', '0');
+        currentUser = { role: 'admin', user: 'Quản Lý (Admin)' };
+        sessionStorage.setItem('hododi_session', JSON.stringify(currentUser));
+        setupUserInterface();
+      } else {
+        loginAttempts++;
+        localStorage.setItem('hododi_login_attempts', loginAttempts.toString());
+        
+        if (loginAttempts >= 10) {
+          // Lock account for 10 mins (+20 mins on further failure)
+          const lockDurationMs = loginAttempts > 10 ? 30 * 60 * 1000 : 10 * 60 * 1000;
+          lockUntilTimestamp = Date.now() + lockDurationMs;
+          localStorage.setItem('hododi_lock_until', lockUntilTimestamp.toString());
+          disableAdminLogin(true);
+          startLockCountdown();
+          alert(`Bạn đã nhập sai 10 lần! Tài khoản Admin bị tạm khóa ${loginAttempts > 10 ? '30' : '10'} phút.`);
+        } else {
+          alert(`Sai thông tin đăng nhập Quản lý! Cảnh báo: Lần thứ ${loginAttempts}/10.`);
+        }
+      }
+    }
+
+    function handleStaffLogin(e) {
+      e.preventDefault();
+      const u = document.getElementById('staff-user').value.trim();
+      const p = document.getElementById('staff-pass').value;
+      const c = document.getElementById('staff-code').value.trim().toUpperCase();
+
+      const found = staffAccounts.find(acc => acc.user === u && acc.pass === p && acc.code === c);
+      if (found) {
+        currentUser = { role: 'staff', user: found.user };
+        sessionStorage.setItem('hododi_session', JSON.stringify(currentUser));
+        setupUserInterface();
+      } else {
+        alert('Thông tin đăng nhập nhân viên không chính xác!');
+      }
+    }
+
+    function setupUserInterface() {
+      document.getElementById('login-section').classList.add('hidden');
+      document.getElementById('app-header').classList.remove('hidden');
+
+      document.getElementById('current-user-name').innerText = currentUser.user;
+      document.getElementById('current-user-role').innerText = currentUser.role === 'admin' ? 'QUẢN LÝ (ADMIN)' : 'NHÂN VIÊN THU NGÂN';
+
+      // Hide Admin-only tabs if Staff logged in
+      const adminElements = document.querySelectorAll('.admin-only');
+      adminElements.forEach(el => {
+        if (currentUser.role === 'staff') {
+          el.classList.add('hidden');
+        } else {
+          el.classList.remove('hidden');
+        }
+      });
+
+      switchTab('pos');
+      renderAllTabs();
+    }
+
+    function logout() {
+      sessionStorage.removeItem('hododi_session');
+      stopScannerCamera();
+      location.reload();
+    }
+
+    /* ================= TAB NAVIGATION ================= */
+    function switchTab(tabId) {
+      // Hide all contents
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById(`${tabId}-tab`).classList.remove('hidden');
+
+      // Highlight navigation buttons
+      document.querySelectorAll('.nav-tab-btn').forEach(btn => {
+        btn.className = "nav-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 text-slate-600 hover:bg-slate-100";
+      });
+      const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+      if (activeBtn) activeBtn.className = "nav-tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 bg-slate-900 text-white shadow-sm";
+
+      if (tabId === 'pos') {
+        startScannerCamera();
+      } else {
+        stopScannerCamera();
+      }
+
+      if (tabId === 'products') renderProductsTab();
+      if (tabId === 'vouchers') renderVouchersTab();
+      if (tabId === 'users') renderStaffList();
+    }
+
+    function renderAllTabs() {
+      renderQuickProducts();
+      renderCartTable();
+      renderHistoryList();
+    }
+
+    /* ================= CAMERA QR SCANNER LOGIC ================= */
+    function startScannerCamera() {
+      const video = document.getElementById('webcam-video');
+      const camStatus = document.getElementById('cam-status');
+      
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        camStatus.innerText = "Trình duyệt không hỗ trợ Camera. Dùng ô nhập thủ công.";
+        return;
+      }
+
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(stream => {
+          videoStream = stream;
+          video.srcObject = stream;
+          video.setAttribute("playsinline", true);
+          video.play();
+          isScanning = true;
+          camStatus.innerText = "Camera sẵn sàng. Hãy đưa mã QR lại gần sát.";
+          requestAnimationFrame(scanQRCodeLoop);
+        })
+        .catch(err => {
+          console.warn("Camera access denied or error:", err);
+          camStatus.innerText = "PC/Thiết bị không có Camera hoặc chưa cấp quyền. Dùng ô nhập mã thủ công.";
+        });
+    }
+
+    function stopScannerCamera() {
+      isScanning = false;
+      if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
+      }
+    }
+
+    function scanQRCodeLoop() {
+      if (!isScanning) return;
+
+      const video = document.getElementById('webcam-video');
+      const canvas = document.getElementById('qr-canvas');
+
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert",
+        });
+
+        if (code && code.data) {
+          const now = Date.now();
+          // Debounce scan every 2.5 seconds for same code
+          if (code.data !== lastScannedCode || now - lastScanTime > 2500) {
+            lastScannedCode = code.data;
+            lastScanTime = now;
+            processScannedCode(code.data);
+          }
+        }
+      }
+      requestAnimationFrame(scanQRCodeLoop);
+    }
+
+    function processScannedCode(codeVal) {
+      const cleanCode = codeVal.trim().toUpperCase();
+      const product = products.find(p => p.sku.toUpperCase() === cleanCode || p.name.toUpperCase().includes(cleanCode));
+
+      if (product) {
+        playBeepSound();
+        addToCart(product);
+      } else {
+        alert(`Đã quét mã: "${cleanCode}" nhưng không tìm thấy sản phẩm trong hệ thống!`);
+      }
+    }
+
+    function handleManualCodeSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById('manual-sku-input');
+      const codeVal = input.value.trim().toUpperCase();
+      processScannedCode(codeVal);
+      input.value = '';
+    }
+
+    /* ================= POS CART & BILLING LOGIC ================= */
+    function renderQuickProducts() {
+      const container = document.getElementById('quick-products-list');
+      container.innerHTML = products.map(p => `
+        <button onclick="addToCartById('${p.id}')" class="p-2.5 bg-white hover:bg-slate-100 rounded-xl border border-slate-200 text-left flex items-center gap-2.5 transition group shadow-sm">
+          <img src="${p.image}" class="w-10 h-10 object-cover rounded-lg border flex-shrink-0" onerror="this.src='https://placehold.co/100x100/1e293b/ffffff?text=SP'">
+          <div class="overflow-hidden">
+            <h4 class="font-bold text-xs text-slate-800 truncate group-hover:text-slate-900">${p.name}</h4>
+            <p class="text-[11px] font-extrabold text-emerald-600">${formatCurrency(p.price)}</p>
+            <p class="text-[9px] font-mono text-slate-400">${p.sku}</p>
+          </div>
+        </button>
+      `).join('');
+    }
+
+    function addToCartById(id) {
+      const p = products.find(item => item.id === id);
+      if (p) {
+        playBeepSound();
+        addToCart(p);
+      }
+    }
+
+    function addToCart(product) {
+      const existing = currentCart.find(item => item.product.id === product.id);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        currentCart.push({ product, qty: 1 });
+      }
+      renderCartTable();
+    }
+
+    function updateCartQty(id, delta) {
+      const item = currentCart.find(i => i.product.id === id);
+      if (item) {
+        item.qty += delta;
+        if (item.qty <= 0) {
+          currentCart = currentCart.filter(i => i.product.id !== id);
+        }
+      }
+      renderCartTable();
+    }
+
+    function removeFromCart(id) {
+      currentCart = currentCart.filter(i => i.product.id !== id);
+      renderCartTable();
+    }
+
+    function renderCartTable() {
+      const tbody = document.getElementById('cart-table-body');
+      const emptyMsg = document.getElementById('empty-cart-msg');
+
+      if (currentCart.length === 0) {
+        tbody.innerHTML = '';
+        emptyMsg.classList.remove('hidden');
+      } else {
+        emptyMsg.classList.add('hidden');
+        tbody.innerHTML = currentCart.map(item => `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-2.5 font-bold text-slate-800">${item.product.name}</td>
+            <td class="py-2.5 text-center">
+              <div class="inline-flex items-center gap-1.5 bg-slate-100 rounded-lg p-0.5 border">
+                <button onclick="updateCartQty('${item.product.id}', -1)" class="w-5 h-5 bg-white text-slate-700 font-bold rounded flex items-center justify-center hover:bg-slate-200">-</button>
+                <span class="font-bold text-xs px-1">${item.qty}</span>
+                <button onclick="updateCartQty('${item.product.id}', 1)" class="w-5 h-5 bg-white text-slate-700 font-bold rounded flex items-center justify-center hover:bg-slate-200">+</button>
+              </div>
+            </td>
+            <td class="py-2.5 text-right font-medium text-slate-600">${formatCurrency(item.product.price)}</td>
+            <td class="py-2.5 text-right font-bold text-slate-900">${formatCurrency(item.product.price * item.qty)}</td>
+            <td class="py-2.5 text-center">
+              <button onclick="removeFromCart('${item.product.id}')" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-xmark"></i></button>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      calculateBillTotal();
+    }
+
+    function applyVoucher() {
+      const input = document.getElementById('voucher-input');
+      const code = input.value.trim().toUpperCase();
+      const found = vouchers.find(v => v.code === code);
+
+      if (found) {
+        appliedVoucherObj = found;
+        document.getElementById('applied-voucher-code').innerText = found.code;
+        document.getElementById('applied-voucher-desc').innerText = found.type === 'percent' ? `Giảm ${found.val}%` : `Giảm ${formatCurrency(found.val)}`;
+        document.getElementById('applied-voucher-badge').classList.remove('hidden');
+        input.value = '';
+        calculateBillTotal();
+      } else {
+        alert('Mã giảm giá không tồn tại hoặc đã hết hạn!');
+      }
+    }
+
+    function removeVoucher() {
+      appliedVoucherObj = null;
+      document.getElementById('applied-voucher-badge').classList.add('hidden');
+      calculateBillTotal();
+    }
+
+    function calculateBillTotal() {
+      const subtotal = currentCart.reduce((sum, item) => sum + (item.product.price * item.qty), 0);
+      let discount = 0;
+
+      if (appliedVoucherObj) {
+        if (appliedVoucherObj.type === 'percent') {
+          discount = (subtotal * appliedVoucherObj.val) / 100;
+        } else {
+          discount = appliedVoucherObj.val;
+        }
+      }
+
+      if (discount > subtotal) discount = subtotal;
+      const total = subtotal - discount;
+
+      document.getElementById('subtotal-val').innerText = formatCurrency(subtotal);
+      document.getElementById('discount-val').innerText = `-${formatCurrency(discount)}`;
+      document.getElementById('total-val').innerText = formatCurrency(total);
+
+      return { subtotal, discount, total };
+    }
+
+    function confirmClearCartModal() {
+      if (currentCart.length === 0) return;
+      openConfirmModal("Xác nhận xóa hóa đơn", "Bạn có chắc chắn muốn xóa toàn bộ sản phẩm trong hóa đơn này?", () => {
+        currentCart = [];
+        removeVoucher();
+        renderCartTable();
+      });
+    }
+
+    function openCheckoutReceiptModal() {
+      if (currentCart.length === 0) {
+        alert("Hóa đơn trống! Vui lòng thêm sản phẩm trước khi xuất hóa đơn.");
+        return;
+      }
+
+      const { subtotal, discount, total } = calculateBillTotal();
+      document.getElementById('receipt-date-print').innerText = new Date().toLocaleString('vi-VN');
+
+      const receiptBody = document.getElementById('receipt-print-items');
+      receiptBody.innerHTML = currentCart.map(item => `
+        <tr>
+          <td>${item.product.name}</td>
+          <td class="text-center">${item.qty}</td>
+          <td class="text-right">${formatCurrency(item.product.price * item.qty)}</td>
+        </tr>
+      `).join('');
+
+      document.getElementById('receipt-subtotal-print').innerText = formatCurrency(subtotal);
+      document.getElementById('receipt-discount-print').innerText = `-${formatCurrency(discount)}`;
+      document.getElementById('receipt-total-print').innerText = formatCurrency(total);
+
+      document.getElementById('checkout-receipt-modal').classList.remove('hidden');
+    }
+
+    function executePrintReceipt() {
+      // Save invoice to history
+      const { subtotal, discount, total } = calculateBillTotal();
+      const invoiceRecord = {
+        id: 'HD-' + Math.floor(100000 + Math.random() * 900000),
+        timestamp: Date.now(),
+        dateStr: new Date().toLocaleString('vi-VN'),
+        items: [...currentCart],
+        total
+      };
+
+      invoiceHistory.unshift(invoiceRecord);
+      localStorage.setItem('hododi_invoices', JSON.stringify(invoiceHistory));
+      renderHistoryList();
+
+      // Trigger Window Print
+      window.print();
+
+      // Clear cart
+      currentCart = [];
+      removeVoucher();
+      renderCartTable();
+      closeModal('checkout-receipt-modal');
+    }
+
+    /* ================= HISTORY LOGIC (AUTO DELETE >48H) ================= */
+    function cleanOldHistory() {
+      const now = Date.now();
+      const fortyEightHoursMs = 48 * 60 * 60 * 1000;
+      invoiceHistory = invoiceHistory.filter(inv => (now - inv.timestamp) < fortyEightHoursMs);
+      localStorage.setItem('hododi_invoices', JSON.stringify(invoiceHistory));
+    }
+
+    function renderHistoryList() {
+      cleanOldHistory();
+      const container = document.getElementById('history-list');
+      if (invoiceHistory.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 col-span-full py-4 text-center">Chưa có lịch sử hóa đơn gần đây.</p>`;
+        return;
+      }
+
+      container.innerHTML = invoiceHistory.map(inv => `
+        <div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm text-xs space-y-1">
+          <div class="flex justify-between font-bold text-slate-900">
+            <span>${inv.id}</span>
+            <span class="text-emerald-700">${formatCurrency(inv.total)}</span>
+          </div>
+          <div class="text-[10px] text-slate-400">${inv.dateStr}</div>
+          <div class="text-[11px] text-slate-600 truncate">${inv.items.map(i => i.product.name).join(', ')}</div>
+        </div>
+      `).join('');
+    }
+
+    /* ================= PRODUCT MANAGEMENT ================= */
+    function renderProductsTab() {
+      const search = document.getElementById('search-product-input').value.trim().toLowerCase();
+      const grid = document.getElementById('products-grid');
+
+      const filtered = products.filter(p => p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search));
+
+      grid.innerHTML = filtered.map(p => `
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+          <div class="space-y-3">
+            <img src="${p.image}" class="w-full h-36 object-cover rounded-xl border" onerror="this.src='https://placehold.co/300x300/1e293b/ffffff?text=SP'">
+            <div>
+              <span class="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">${p.sku}</span>
+              <h3 class="font-extrabold text-sm text-slate-900 mt-1">${p.name}</h3>
+              <p class="text-xs text-slate-500 line-clamp-2 mt-0.5">${p.desc || 'Không có mô tả'}</p>
+              <p class="text-emerald-700 font-black text-base mt-2">${formatCurrency(p.price)}</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 pt-4 border-t border-slate-100 mt-3">
+            <button onclick="viewProductQR('${p.id}')" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold text-xs flex items-center justify-center gap-1">
+              <i class="fa-solid fa-qrcode"></i> (Xem sản phẩm)
+            </button>
+            <button onclick="confirmDeleteProduct('${p.id}')" class="py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1 border border-red-200">
+              <i class="fa-solid fa-trash"></i> (Xóa sản phẩm)
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function viewProductQR(id) {
+      const p = products.find(item => item.id === id);
+      if (!p) return;
+
+      document.getElementById('modal-qr-title').innerText = p.name;
+      document.getElementById('modal-qr-sku').innerText = `MÃ: ${p.sku}`;
+      
+      const container = document.getElementById('modal-qr-container');
+      container.innerHTML = '';
+      new QRCode(container, {
+        text: p.sku,
+        width: 160,
+        height: 160
+      });
+
+      document.getElementById('product-qr-modal').classList.remove('hidden');
+    }
+
+    function confirmDeleteProduct(id) {
+      if (currentUser.role === 'staff') {
+        alert("Nhân viên không có quyền xóa sản phẩm!");
+        return;
+      }
+      openConfirmModal("Xác nhận xóa sản phẩm", "Bạn có chắc chắn muốn xóa sản phẩm này khỏi hệ thống?", () => {
+        products = products.filter(p => p.id !== id);
+        localStorage.setItem('hododi_products', JSON.stringify(products));
+        renderProductsTab();
+        renderQuickProducts();
+      });
+    }
+
+    /* ================= CREATE PRODUCT LOGIC (ADMIN) ================= */
+    function handlePreviewProductModal(e) {
+      e.preventDefault();
+      const name = document.getElementById('prod-name-input').value.trim();
+      const desc = document.getElementById('prod-desc-input').value.trim();
+      const price = parseFloat(document.getElementById('prod-price-input').value);
+      const imgElem = document.getElementById('image-preview-element');
+
+      // AI/System Auto Generated SKU (e.g. HOD-8921)
+      const generatedSKU = 'HOD-' + Math.floor(1000 + Math.random() * 9000);
+
+      tempNewProduct = {
+        id: Date.now().toString(),
+        sku: generatedSKU,
+        name,
+        desc,
+        price,
+        image: imgElem.src || 'https://placehold.co/150x150/1e293b/ffffff?text=HODODI'
+      };
+
+      // Populate preview modal
+      document.getElementById('prev-prod-name').innerText = name;
+      document.getElementById('prev-prod-price').innerText = formatCurrency(price);
+      document.getElementById('prev-prod-sku').innerText = `Mã: ${generatedSKU}`;
+      document.getElementById('prev-prod-img').src = tempNewProduct.image;
+
+      const qrBox = document.getElementById('prev-qr-code-box');
+      qrBox.innerHTML = '';
+      new QRCode(qrBox, { text: generatedSKU, width: 120, height: 120 });
+
+      document.getElementById('create-product-preview-modal').classList.remove('hidden');
+    }
+
+    function confirmCreateProduct() {
+      if (!tempNewProduct) return;
+      products.unshift(tempNewProduct);
+      localStorage.setItem('hododi_products', JSON.stringify(products));
+      
+      closeModal('create-product-preview-modal');
+      alert("Đã tạo sản phẩm thành công và kết nối lập tức với Camera quét!");
+      
+      // Reset form
+      document.getElementById('prod-name-input').value = '';
+      document.getElementById('prod-desc-input').value = '';
+      document.getElementById('prod-price-input').value = '';
+      document.getElementById('image-preview-container').classList.add('hidden');
+      
+      renderQuickProducts();
+      switchTab('products');
+    }
+
+    /* ================= VOUCHER MANAGEMENT (ADMIN) ================= */
+    function generateRandomVoucherCode() {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let result = '';
+      for (let i = 0; i < 5; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      document.getElementById('voucher-code-gen').value = result;
+    }
+
+    function toggleVoucherUnitLabel() {
+      const type = document.getElementById('voucher-type-select').value;
+      const label = document.getElementById('voucher-value-label');
+      label.innerText = type === 'percent' ? 'Giá trị giảm (%)' : 'Giá trị giảm (VNĐ)';
+    }
+
+    function handleCreateVoucher(e) {
+      e.preventDefault();
+      const code = document.getElementById('voucher-code-gen').value.toUpperCase();
+      const type = document.getElementById('voucher-type-select').value;
+      const val = parseFloat(document.getElementById('voucher-val-input').value);
+
+      vouchers.unshift({ code, type, val });
+      localStorage.setItem('hododi_vouchers', JSON.stringify(vouchers));
+      
+      generateRandomVoucherCode();
+      document.getElementById('voucher-val-input').value = '';
+      renderVouchersTab();
+    }
+
+    function renderVouchersTab() {
+      const tbody = document.getElementById('vouchers-table-body');
+      tbody.innerHTML = vouchers.map(v => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="py-2 font-mono font-bold text-slate-900">${v.code}</td>
+          <td class="py-2 font-semibold text-emerald-700">${v.type === 'percent' ? `${v.val}%` : formatCurrency(v.val)}</td>
+          <td class="py-2 text-right">
+            <button onclick="deleteVoucher('${v.code}')" class="text-red-500 hover:text-red-700 font-bold"><i class="fa-solid fa-trash"></i></button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function deleteVoucher(code) {
+      vouchers = vouchers.filter(v => v.code !== code);
+      localStorage.setItem('hododi_vouchers', JSON.stringify(vouchers));
+      renderVouchersTab();
+    }
+
+    /* ================= STAFF ACCOUNT MANAGEMENT (ADMIN) ================= */
+    function generateNewStaffCode() {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let code = 'NV';
+      for (let i = 0; i < 4; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      document.getElementById('new-staff-code').value = code;
+    }
+
+    function handleCreateStaffAccount(e) {
+      e.preventDefault();
+      const user = document.getElementById('new-staff-user').value.trim();
+      const pass = document.getElementById('new-staff-pass').value;
+      const code = document.getElementById('new-staff-code').value;
+
+      staffAccounts.push({ user, pass, code });
+      localStorage.setItem('hododi_staff', JSON.stringify(staffAccounts));
+
+      document.getElementById('new-staff-user').value = '';
+      document.getElementById('new-staff-pass').value = '';
+      generateNewStaffCode();
+      renderStaffList();
+      alert("Đã tạo tài khoản nhân viên mới!");
+    }
+
+    function renderStaffList() {
+      const search = document.getElementById('search-staff-input').value.trim().toLowerCase();
+      const tbody = document.getElementById('staff-table-body');
+
+      const filtered = staffAccounts.filter(acc => acc.user.toLowerCase().includes(search));
+
+      tbody.innerHTML = filtered.map(acc => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="py-2 font-bold text-slate-800">${acc.user}</td>
+          <td class="py-2 font-mono text-slate-600">${acc.code}</td>
+          <td class="py-2"><span class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-semibold text-[10px]">Thu Ngân</span></td>
+          <td class="py-2 text-right">
+            <button onclick="deleteStaffAccount('${acc.user}')" class="text-red-500 hover:text-red-700 font-bold"><i class="fa-solid fa-user-minus"></i></button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function deleteStaffAccount(username) {
+      staffAccounts = staffAccounts.filter(a => a.user !== username);
+      localStorage.setItem('hododi_staff', JSON.stringify(staffAccounts));
+      renderStaffList();
+    }
+
+    /* ================= UTILITY HELPER FUNCTIONS ================= */
+    function formatCurrency(num) {
+      return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num);
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.add('hidden');
+    }
+
+    function openConfirmModal(title, msg, onConfirmCallback) {
+      document.getElementById('confirm-modal-title').innerText = title;
+      document.getElementById('confirm-modal-msg').innerText = msg;
+      
+      const btn = document.getElementById('confirm-modal-btn');
+      btn.onclick = function() {
+        onConfirmCallback();
+        closeModal('confirm-action-modal');
+      };
+
+      document.getElementById('confirm-action-modal').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
